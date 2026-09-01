@@ -11,27 +11,22 @@ LINK_GRUP = "https://t.me/+etpqxigeQ7FlOGE0"
 OFFSET = 0
 KNOWN_USERS = set()
 
-# Prompt creat special pentru o conversație umane, ultra-naturală
 SYSTEM_PROMPT = """
-Ești un admin/asistent super prietenos, amabil și uman pe Telegram.
-Numele tău de pe chat este prietenos, vorbești fix ca un om de zi cu zi (folosești emoticoane, prescurtări naturale când e cazul, limbaj cald).
+Ești un admin/asistent super prietenos, uman și sociabil pe Telegram.
+Vorbești relaxat și natural în limba română, exact ca o persoană reală (folosești emoticoane, limbaj cald, propoziții scurte).
 
-REGULI OBLIGATORII DE COMPORTAMENT:
-1. PRIMUL MESAJ DIN CHAT: Trebuie obligatoriu să înceapă FIX cu fraza:
+REGULI OBLIGATORII:
+1. La PRIMUL MESAJ din conversație, răspunsul tău TREBUIE să înceapă obligatoriu cu fraza:
 "Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖"
-După această frază, continuă conversația natural.
+2. La următoarele mesaje din aceeași conversație, NU mai repeta fraza de introducere sub nicio formă! Vorbește direct și natural.
+3. Vorbește normal despre orice (small-talk, ce faci, glume) FĂRĂ să menționezi IBAN-ul sau ce conține grupul, dacă nu te întreabă omul direct!
 
-2. MESAJELE URMĂTOARE: NU mai repeta NICIODATĂ fraza de mai sus! Vorbește direct, scurt (1-3 propoziții), cald și natural.
-
-3. STIL DE CONVERSAȚIE UMANĂ:
-- Dacă omul te întreabă "ce faci", "ce mai zici", "ce faci w", răspunde-i ca un prieten (ex: "Uite bine, stau pe acasă și mă mai uit pe mesaje. Tu ce mai faci? 😊").
-- Dacă omul zice că e obosit/merge la culcare, dorește-i somn ușor.
-- Fii sociabil, nu aduce vorba de IBAN sau plată din proprie inițiativă dacă omul doar face small-talk sau te întreabă de viață.
-
-4. INFORMAȚII PLATĂ & IBAN (Oferă-le DOAR când omul întreabă de plată, bani, acces sau IBAN):
-- IBAN: RO36 RNCB 0511 1755 6400 0001
-- Titular: Cristian ionut B
-- Explică-i scurt și uman: "Trimiți banii în contul de mai sus, iar după ce ai făcut transferul, lasă-mi o poză/screenshot cu dovada direct aici pe chat ca să-ți dau accesul pe loc! 💳✨"
+4. DOAR DACĂ CLIENTUL ÎNTREABĂ DIRECT de grup, conținut, plată, bani sau IBAN:
+   • Spune-i că grupul conține peste 13.000 de videoclipuri și poze (13k videos & photos).
+   • Oferă-i datele de plată:
+     - IBAN: RO36 RNCB 0511 1755 6400 0001 
+     - Titular: Cristian ionut B
+   • Spune-i să trimită o POZĂ (screenshot) cu dovada plății pe chat pentru a primi link-ul de acces.
 """
 
 
@@ -43,11 +38,10 @@ def get_ai_response(chat_id, user_text):
 
     instruction = ""
     if is_first:
-        instruction = " (ATENȚIE: Acesta este primul mesaj! Începe obligatoriu cu: 'Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖')"
+        instruction = " (ATENȚIE: Primul mesaj! Începe obligatoriu cu: 'Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖')"
 
     if not GROQ_API_KEY:
-        print("EROARE CRITICĂ: GROQ_API_KEY nu este setată în Railway!")
-        return "Eroare setare AI. Verifică cheia în Railway."
+        return "⚠️ EROARE: Nu ai setat variabila GROQ_API_KEY în Railway sau e goală!"
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -55,26 +49,30 @@ def get_ai_response(chat_id, user_text):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text + instruction}
         ],
-        "max_tokens": 180,
-        "temperature": 0.8  # Temperatură puțin mai mare pentru un ton mai uman și mai creativ
+        "max_tokens": 150,
+        "temperature": 0.8
     }
 
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=15)
         res_json = res.json()
+
+        if "error" in res_json:
+            err_msg = res_json["error"].get("message", "Eroare necunoscută")
+            return f"❌ Eroare Groq API: {err_msg}"
+
         if "choices" in res_json:
             return res_json["choices"][0]["message"]["content"].strip()
         else:
-            print("Eroare răspuns Groq:", res_json)
-            return "Hey! Sunt aici. Cu ce te pot ajuta? 😊"
+            return f"⚠️ Răspuns neașteptat de la server: {res_json}"
+
     except Exception as e:
-        print("Eroare conexiune AI:", e)
-        return "Sunt online! Spune-mi ce mai zici sau dacă ai nevoie de IBAN."
+        return f"❌ Eroare conexiune AI: {str(e)}"
 
 
 def main():
@@ -111,14 +109,15 @@ def main():
                 if not connection_id:
                     continue
 
-                # Când primește poză (dovada plății)
+                # I. Dacă trimite poză (Dovada plății)
                 if photo:
                     answer = (
-                        "Super! Am primit poza cu dovada plății! 💳✅ Îți mulțumesc frumos!\n\n"
+                        "Am primit poza cu dovada plății! 💳✅ Îți mulțumesc frumos!\n\n"
                         "Aici ai link-ul tău direct pentru accesul în grup:\n"
                         f"{LINK_GRUP}\n\n"
                         "Apasă pe el și bine ai venit! 🌸"
                     )
+                # II. Orice text trimis merge EXCLUSIV prin AI
                 elif text:
                     answer = get_ai_response(chat_id, text)
                 else:
@@ -141,6 +140,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
