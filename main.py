@@ -11,46 +11,44 @@ OFFSET = 0
 def reply_for(text):
     text_lower = text.lower().strip()
 
-    # Întrebări despre grup
-    group_words = [
-        "grup", "grupul", "grupu",
-        "acces la grup",
-        "intru in grup", "intru în grup",
-        "cum intru in grup", "cum intru în grup"
-    ]
+    # 1. Întrebări despre faptul că e bot / om
+    if any(w in text_lower for w in ["esti om", "ești om", "esti bot", "ești bot", "vreau sa fiu om", "vreau să fiu om", "real"]):
+        return "Sunt un chatbot creat să ajut pe aici, dar vorbesc aproape ca un om. 😅 Tu ce faci?"
 
-    # Întrebări despre preț
-    price_words = [
-        "pret", "preț", "pretul", "prețul",
-        "cat costa", "cât costă",
-        "cat e", "cât e",
-        "cost", "tarif"
-    ]
+    # 2. Întrebări / răspunsuri de tipul "ce faci", "dorm", "stau"
+    if any(w in text_lower for w in ["dorm", "ma culc", "mă culc"]):
+        return "Somn ușor! 😴 Vorbim când te trezești dacă te interesează ceva."
 
-    if any(word in text_lower for word in group_words):
+    if any(w in text_lower for w in ["ce faci", "ce fac", "cf", "ce mai faci", "ce zici"]):
+        return "Uite, bine, răspund la mesaje. Tu ce faci? 😊"
+
+    if any(w in text_lower for w in ["bine", "stau", "nimic", "frec menta"]):
+        return "Super! Dacă ai nevoie de vreo informație despre grup sau plată, să-mi zici. 👌"
+
+    # 3. Întrebări despre Plată / IBAN / Cum se plătește
+    if any(w in text_lower for w in ["plata", "plată", "iban", "banca", "bancă", "revolut", "card", "transfer", "cum platesc", "cum plătesc"]):
         return (
-            "Sigur 😊 Dacă vrei acces la grup, "
-            "spune-mi și îți explic cum funcționează."
+            "Uite datele pentru plată: 💳\n\n"
+            "Titular: Cristian ionut B\n"
+            "Banca: BCR (Nenea Ionică Polițistul)\n"
+            "IBAN: RO36 RNCB 0511 1755 6400 0001\n\n"
+            "După ce trimiți banii, trimite-mi o poză cu dovada și îți dau accesul imediat!"
         )
 
-    if any(word in text_lower for word in price_words):
-        return (
-            "Pentru românce este 20 lei pentru o săptămână "
-            "sau 50 lei permanent. 😊"
-        )
+    # 4. Întrebări despre Preț
+    if any(w in text_lower for w in ["pret", "preț", "pretul", "prețul", "cat costa", "cât costă", "cat e", "cât e", "cost"]):
+        return "Accesul este 20 lei pentru o săptămână sau 50 lei permanent. 😊"
 
-    if any(word in text_lower for word in [
-        "bună", "buna", "salut", "hei", "hello"
-    ]):
-        return "Bună 😊 Cu ce te pot ajuta?"
+    # 5. Întrebări despre Grup / Ce conține
+    if any(w in text_lower for w in ["grup", "grupul", "grupu", "acces", "intru", "cum functioneaza", "cum funcționează", "ce are", "ce contine", "ce conține"]):
+        return "Grupul are peste 13.000 de videoclipuri și 2.000 de poze. 🎥📸 Spune-mi dacă vrei să intri și îți dau IBAN-ul!"
 
-    if "cum funcționează" in text_lower or "cum functioneaza" in text_lower:
-        return "Sigur 😊 Spune-mi ce anume vrei să știi și îți explic."
+    # 6. Saluturi
+    if any(w in text_lower for w in ["bună", "buna", "salut", "hei", "hello", "buna ziua"]):
+        return "Bună! 😊 Ce mai faci?"
 
-    if "cum plătesc" in text_lower or "cum platesc" in text_lower:
-        return "Sigur 😊 Îți explic imediat cum poți face plata."
-
-    return "Sigur 😊 Spune-mi ce te interesează."
+    # Răspuns scurt, uman, dacă nu se potrivește nicio regulă
+    return "Mă bucur de conversație! Spune-mi dacă vrei detalii despre grup sau IBAN-ul pentru acces. 😊"
 
 
 def main():
@@ -104,3 +102,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
