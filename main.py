@@ -24,7 +24,7 @@ REGULI OBLIGATORII:
 4. DOAR DACĂ CLIENTUL ÎNTREABĂ DIRECT de grup, conținut, plată, bani sau IBAN:
    • Spune-i că grupul conține peste 13.000 de videoclipuri și poze (13k videos & photos).
    • Oferă-i datele de plată:
-     - IBAN: RO36 RNCB 0511 1755 6400 0001 
+     - IBAN: RO36 RNCB 0511 1755 6400 0001 (BCR - Nenea Ionică Polițistul)
      - Titular: Cristian ionut B
    • Spune-i să trimită o POZĂ (screenshot) cu dovada plății pe chat pentru a primi link-ul de acces.
 """
@@ -49,7 +49,7 @@ def get_ai_response(chat_id, user_text):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.1-8b-instant",
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text + instruction}
@@ -109,7 +109,6 @@ def main():
                 if not connection_id:
                     continue
 
-                # I. Dacă trimite poză (Dovada plății)
                 if photo:
                     answer = (
                         "Am primit poza cu dovada plății! 💳✅ Îți mulțumesc frumos!\n\n"
@@ -117,7 +116,6 @@ def main():
                         f"{LINK_GRUP}\n\n"
                         "Apasă pe el și bine ai venit! 🌸"
                     )
-                # II. Orice text trimis merge EXCLUSIV prin AI
                 elif text:
                     answer = get_ai_response(chat_id, text)
                 else:
