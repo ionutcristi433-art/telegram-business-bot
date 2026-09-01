@@ -1,9 +1,10 @@
+          
 import os
 import time
 import requests
 
 TOKEN = os.environ.get("BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 API = f"https://api.telegram.org/bot{TOKEN}"
 LINK_GRUP = "https://t.me/+etpqxigeQ7FlOGE0"
@@ -12,29 +13,95 @@ OFFSET = 0
 KNOWN_USERS = set()
 
 SYSTEM_PROMPT = """
-Ești un admin/asistent super prietenos, uman și sociabil pe Telegram.
-Vorbești relaxat și natural în limba română, exact ca o persoană reală (folosești emoticoane, limbaj cald, propoziții scurte).
+Ești un chatbot prietenos care vorbește natural în limba română.
 
-REGULI OBLIGATORII:
-1. La PRIMUL MESAJ din conversație, răspunsul tău TREBUIE să înceapă obligatoriu cu fraza:
-"Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖"
-2. La următoarele mesaje din aceeași conversație, NU mai repeta fraza de introducere sub nicio formă! Vorbește direct și natural.
-3. Vorbește normal despre orice (small-talk, ce faci, glume) FĂRĂ să menționezi IBAN-ul sau ce conține grupul, dacă nu te întreabă omul direct!
+REGULA PRINCIPALĂ:
+Răspunde natural și direct la ceea ce spune utilizatorul.
 
-4. DOAR DACĂ CLIENTUL ÎNTREABĂ DIRECT de grup, conținut, plată, bani sau IBAN:
-   • Spune-i că grupul conține peste 13.000 de videoclipuri și poze (13k videos & photos).
-   • Oferă-i datele de plată:
-     - IBAN: RO36 RNCB 0511 1755 6400 0001 (BCR - Nenea Ionică Polițistul)
-     - Titular: Cristian ionut B
-   • Spune-i să trimită o POZĂ (screenshot) cu dovada plății pe chat pentru a primi link-ul de acces.
+FOARTE IMPORTANT:
+Dacă utilizatorul vorbește normal, răspunde normal.
+NU aduce singur în discuție grupul, accesul, prețul, plata, IBAN-ul,
+videoclipurile, pozele sau dovada plății.
+
+Nu face reclamă grupului.
+Nu încerca să convingi utilizatorul să cumpere.
+Nu schimba o conversație normală într-o conversație despre grup.
+
+EXEMPLE DE CONVERSAȚIE NORMALĂ:
+
+Utilizator: Salut
+Tu: Salut! 😄 Ce faci?
+
+Utilizator: Ce faci?
+Tu: Sunt pe aici 😄 Tu ce faci?
+
+Utilizator: Ce vreme e?
+Tu: Sper să fie o zi frumoasă 😄
+
+La conversațiile normale vorbești ca un chatbot prietenos
+și răspunzi doar la subiectul discutat.
+
+MODUL GRUP:
+
+Vorbești despre grup DOAR dacă utilizatorul întreabă direct despre:
+- grup
+- acces
+- vreau acces
+- vreau să intru
+- cât costă
+- cât este
+- preț
+- plata
+- cum plătesc
+- unde plătesc
+- IBAN
+- cont bancar
+- date de plată
+- ce conține
+- câte videoclipuri sunt
+- câte poze sunt
+
+Atunci poți explica:
+
+Grupul conține:
+
+13.000+ videoclipuri 🎥
+2.000+ poze 📸
+
+Dacă utilizatorul dorește acces și întreabă despre plată,
+poți oferi datele de plată.
+
+DATE DE PLATĂ:
+
+Nume titular:
+
+Cristian Ionut B
+
+IBAN:
+
+RO36 RNCB 0511 1755 6400 0001
+
+După efectuarea plății, utilizatorul trebuie să trimită o poză/screenshot
+cu dovada plății pentru a primi accesul.
+
+NU inventa alte date.
+NU modifica IBAN-ul.
+NU modifica numele titularului.
+
+PRIMUL MESAJ:
+
+La primul mesaj al utilizatorului trebuie să începi exact cu:
+
+Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖
+
+Această frază se spune DOAR la primul mesaj.
+La mesajele următoare NU o mai repeta.
+
+IMPORTANT:
+Dacă utilizatorul nu întreabă despre grup, acces, preț sau plată,
+continuă conversația normală și NU menționa aceste lucruri.
 """
 
-# Lista de modele alternative de testat pe Groq
-MODELS_TO_TRY = [
-    "llama3-8b-8192",
-    "llama-3.1-8b-instant",
-    "llama-3.3-70b-versatile"
-]
 
 def get_ai_response(chat_id, user_text):
     global KNOWN_USERS
@@ -42,52 +109,114 @@ def get_ai_response(chat_id, user_text):
     is_first = chat_id not in KNOWN_USERS
     KNOWN_USERS.add(chat_id)
 
-    instruction = ""
+    if not GEMINI_API_KEY:
+        return "⚠️ EROARE: GEMINI_API_KEY nu este setat în Railway!"
+
+    first_instruction = ""
+
     if is_first:
-        instruction = " (ATENȚIE: Primul mesaj! Începe obligatoriu cu: 'Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖')"
+        first_instruction = """
+Acesta este PRIMUL mesaj al utilizatorului.
 
-    api_key = (GROQ_API_KEY or "").strip()
-    if not api_key:
-        return "⚠️ EROARE: Variabila GROQ_API_KEY lipsește din Railway Variables!"
+Începe obligatoriu răspunsul cu:
+Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖
+"""
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
+    url = (
+        "https://generativelanguage.googleapis.com/"
+        "v1beta/models/gemini-3.7-flash:generateContent"
+    )
+
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "x-goog-api-key": GEMINI_API_KEY.strip(),
         "Content-Type": "application/json"
     }
 
-    last_error = ""
-
-    # Încearcă modelele pe rând până când unul funcționează
-    for model_name in MODELS_TO_TRY:
-        payload = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_text + instruction}
-            ],
-            "max_tokens": 150,
-            "temperature": 0.8
+    payload = {
+        "system_instruction": {
+            "parts": [
+                {
+                    "text": SYSTEM_PROMPT
+                }
+            ]
+        },
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": user_text + "\n\n" + first_instruction
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 250
         }
+    }
 
-        try:
-            res = requests.post(url, json=payload, headers=headers, timeout=12)
-            res_json = res.json()
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
 
-            if "choices" in res_json and len(res_json["choices"]) > 0:
-                return res_json["choices"][0]["message"]["content"].strip()
+        data = response.json()
 
-            if "error" in res_json:
-                last_error = res_json["error"].get("message", str(res_json["error"]))
+        if response.status_code != 200:
+            error = data.get("error", {})
+            message = error.get(
+                "message",
+                "Eroare necunoscută Gemini"
+            )
 
-        except Exception as e:
-            last_error = str(e)
+            return f"❌ Eroare Gemini API: {message}"
 
-    return f"❌ Eroare API (verifică cheia Groq): {last_error}"
+        candidates = data.get("candidates", [])
+
+        if not candidates:
+            return "⚠️ Gemini nu a returnat niciun răspuns."
+
+        parts = candidates[0].get("content", {}).get("parts", [])
+
+        if not parts:
+            return "⚠️ Gemini a returnat un răspuns gol."
+
+        answer = parts[0].get("text", "").strip()
+
+        if not answer:
+            return "⚠️ Gemini a returnat un răspuns gol."
+
+        return answer
+
+    except requests.exceptions.Timeout:
+        return "❌ Gemini nu a răspuns la timp."
+
+    except requests.exceptions.RequestException as e:
+        return f"❌ Eroare conexiune Gemini: {str(e)}"
+
+    except Exception as e:
+        return f"❌ Eroare AI: {str(e)}"
 
 
 def main():
     global OFFSET
+
+    if not TOKEN:
+        print("EROARE: BOT_TOKEN nu este setat!")
+        return
+
+    if not GEMINI_API_KEY:
+        print("EROARE: GEMINI_API_KEY nu este setat!")
+        return
+
+    print("================================")
+    print("BOT PORNIT")
+    print("AI: GOOGLE GEMINI")
+    print("================================")
 
     while True:
         try:
@@ -108,29 +237,55 @@ def main():
                 OFFSET = updates[-1]["update_id"] + 1
 
             for update in updates:
+
                 message = update.get("business_message")
+
                 if not message:
                     continue
 
                 text = message.get("text")
                 photo = message.get("photo")
-                connection_id = message.get("business_connection_id")
+
+                connection_id = message.get(
+                    "business_connection_id"
+                )
+
                 chat_id = message["chat"]["id"]
 
                 if not connection_id:
                     continue
 
+                # =========================
+                # POZĂ = DOVADĂ PLATĂ
+                # =========================
+
                 if photo:
+
                     answer = (
-                        "Am primit poza cu dovada plății! 💳✅ Îți mulțumesc frumos!\n\n"
-                        "Aici ai link-ul tău direct pentru accesul în grup:\n"
+                        "Am primit poza cu dovada plății! 💳✅\n\n"
+                        "Îți mulțumesc frumos!\n\n"
+                        "Aici este linkul de acces:\n"
                         f"{LINK_GRUP}\n\n"
-                        "Apasă pe el și bine ai venit! 🌸"
+                        "Bine ai venit! 🌸"
                     )
+
+                # =========================
+                # TEXT = GEMINI
+                # =========================
+
                 elif text:
-                    answer = get_ai_response(chat_id, text)
+
+                    answer = get_ai_response(
+                        chat_id,
+                        text
+                    )
+
                 else:
                     continue
+
+                # =========================
+                # TRIMITE MESAJ TELEGRAM
+                # =========================
 
                 requests.post(
                     f"{API}/sendMessage",
@@ -143,13 +298,16 @@ def main():
                 )
 
         except Exception as e:
-            print("Eroare main loop:", e)
+
+            print(
+                "Eroare main loop:",
+                e
+            )
+
             time.sleep(5)
 
 
 if __name__ == "__main__":
     main()
-
-
 
 
