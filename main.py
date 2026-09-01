@@ -29,6 +29,12 @@ REGULI OBLIGATORII:
    • Spune-i să trimită o POZĂ (screenshot) cu dovada plății pe chat pentru a primi link-ul de acces.
 """
 
+# Lista de modele alternative de testat pe Groq
+MODELS_TO_TRY = [
+    "llama3-8b-8192",
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile"
+]
 
 def get_ai_response(chat_id, user_text):
     global KNOWN_USERS
@@ -40,39 +46,44 @@ def get_ai_response(chat_id, user_text):
     if is_first:
         instruction = " (ATENȚIE: Primul mesaj! Începe obligatoriu cu: 'Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖')"
 
-    if not GROQ_API_KEY:
-        return "⚠️ EROARE: Nu ai setat variabila GROQ_API_KEY în Railway sau e goală!"
+    api_key = (GROQ_API_KEY or "").strip()
+    if not api_key:
+        return "⚠️ EROARE: Variabila GROQ_API_KEY lipsește din Railway Variables!"
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text + instruction}
-        ],
-        "max_tokens": 150,
-        "temperature": 0.8
-    }
 
-    try:
-        res = requests.post(url, json=payload, headers=headers, timeout=15)
-        res_json = res.json()
+    last_error = ""
 
-        if "error" in res_json:
-            err_msg = res_json["error"].get("message", "Eroare necunoscută")
-            return f"❌ Eroare Groq API: {err_msg}"
+    # Încearcă modelele pe rând până când unul funcționează
+    for model_name in MODELS_TO_TRY:
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_text + instruction}
+            ],
+            "max_tokens": 150,
+            "temperature": 0.8
+        }
 
-        if "choices" in res_json:
-            return res_json["choices"][0]["message"]["content"].strip()
-        else:
-            return f"⚠️ Răspuns neașteptat de la server: {res_json}"
+        try:
+            res = requests.post(url, json=payload, headers=headers, timeout=12)
+            res_json = res.json()
 
-    except Exception as e:
-        return f"❌ Eroare conexiune AI: {str(e)}"
+            if "choices" in res_json and len(res_json["choices"]) > 0:
+                return res_json["choices"][0]["message"]["content"].strip()
+
+            if "error" in res_json:
+                last_error = res_json["error"].get("message", str(res_json["error"]))
+
+        except Exception as e:
+            last_error = str(e)
+
+    return f"❌ Eroare API (verifică cheia Groq): {last_error}"
 
 
 def main():
