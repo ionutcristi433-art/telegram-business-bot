@@ -214,11 +214,11 @@ def get_ai_response(chat_id, user_text):
 
     print("Toate modelele Gemini au eșuat:")
     print("\n".join(errors))
-
-    return (
-        "❌ Gemini nu este disponibil momentan. "
-        "Încearcă din nou peste câteva secunde."
-    )
+return (
+    "❌ Eroare Gemini:\n\n"
+    + "\n".join(errors)
+)
+    
 
 
 def main():
