@@ -1,4 +1,3 @@
-          
 import os
 import time
 import requests
@@ -15,33 +14,14 @@ KNOWN_USERS = set()
 SYSTEM_PROMPT = """
 Ești un chatbot prietenos care vorbește natural în limba română.
 
-REGULA PRINCIPALĂ:
-Răspunde natural și direct la ceea ce spune utilizatorul.
+Răspunde normal și direct la ceea ce spune utilizatorul.
 
-FOARTE IMPORTANT:
+IMPORTANT:
 Dacă utilizatorul vorbește normal, răspunde normal.
 NU aduce singur în discuție grupul, accesul, prețul, plata, IBAN-ul,
 videoclipurile, pozele sau dovada plății.
 
-Nu face reclamă grupului.
-Nu încerca să convingi utilizatorul să cumpere.
-Nu schimba o conversație normală într-o conversație despre grup.
-
-EXEMPLE DE CONVERSAȚIE NORMALĂ:
-
-Utilizator: Salut
-Tu: Salut! 😄 Ce faci?
-
-Utilizator: Ce faci?
-Tu: Sunt pe aici 😄 Tu ce faci?
-
-Utilizator: Ce vreme e?
-Tu: Sper să fie o zi frumoasă 😄
-
-La conversațiile normale vorbești ca un chatbot prietenos
-și răspunzi doar la subiectul discutat.
-
-MODUL GRUP:
+Nu face reclamă grupului și nu schimba conversația către grup.
 
 Vorbești despre grup DOAR dacă utilizatorul întreabă direct despre:
 - grup
@@ -49,7 +29,6 @@ Vorbești despre grup DOAR dacă utilizatorul întreabă direct despre:
 - vreau acces
 - vreau să intru
 - cât costă
-- cât este
 - preț
 - plata
 - cum plătesc
@@ -61,17 +40,14 @@ Vorbești despre grup DOAR dacă utilizatorul întreabă direct despre:
 - câte videoclipuri sunt
 - câte poze sunt
 
-Atunci poți explica:
+Atunci poți spune:
 
 Grupul conține:
 
 13.000+ videoclipuri 🎥
 2.000+ poze 📸
 
-Dacă utilizatorul dorește acces și întreabă despre plată,
-poți oferi datele de plată.
-
-DATE DE PLATĂ:
+Dacă utilizatorul cere datele de plată, trimite:
 
 Nume titular:
 
@@ -81,50 +57,33 @@ IBAN:
 
 RO36 RNCB 0511 1755 6400 0001
 
-După efectuarea plății, utilizatorul trebuie să trimită o poză/screenshot
+După efectuarea plății, spune-i să trimită o poză/screenshot
 cu dovada plății pentru a primi accesul.
 
 NU inventa alte date.
 NU modifica IBAN-ul.
 NU modifica numele titularului.
 
-PRIMUL MESAJ:
-
-La primul mesaj al utilizatorului trebuie să începi exact cu:
+La primul mesaj al utilizatorului începe obligatoriu cu:
 
 Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖
 
-Această frază se spune DOAR la primul mesaj.
-La mesajele următoare NU o mai repeta.
-
-IMPORTANT:
-Dacă utilizatorul nu întreabă despre grup, acces, preț sau plată,
-continuă conversația normală și NU menționa aceste lucruri.
+Această frază se spune doar la primul mesaj.
+La următoarele mesaje nu o mai repeta.
 """
 
+# Modele Gemini încercate pe rând
+GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash"
+]
 
-def get_ai_response(chat_id, user_text):
-    global KNOWN_USERS
 
-    is_first = chat_id not in KNOWN_USERS
-    KNOWN_USERS.add(chat_id)
-
-    if not GEMINI_API_KEY:
-        return "⚠️ EROARE: GEMINI_API_KEY nu este setat în Railway!"
-
-    first_instruction = ""
-
-    if is_first:
-        first_instruction = """
-Acesta este PRIMUL mesaj al utilizatorului.
-
-Începe obligatoriu răspunsul cu:
-Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖
-"""
-
+def ask_gemini(model, user_text):
     url = (
         "https://generativelanguage.googleapis.com/"
-        "v1beta/models/gemini-3.7-flash:generateContent"
+        f"v1beta/models/{model}:generateContent"
     )
 
     headers = {
@@ -145,7 +104,7 @@ Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖
                 "role": "user",
                 "parts": [
                     {
-                        "text": user_text + "\n\n" + first_instruction
+                        "text": user_text
                     }
                 ]
             }
@@ -156,61 +115,96 @@ Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖
         }
     }
 
-    try:
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=30
+    response = requests.post(
+        url,
+        json=payload,
+        headers=headers,
+        timeout=30
+    )
+
+    data = response.json()
+
+    if response.status_code != 200:
+        error = data.get("error", {})
+        message = error.get("message", "Eroare necunoscută")
+        return None, message
+
+    candidates = data.get("candidates", [])
+
+    if not candidates:
+        return None, "Gemini nu a returnat niciun răspuns."
+
+    parts = candidates[0].get("content", {}).get("parts", [])
+
+    if not parts:
+        return None, "Răspuns Gemini gol."
+
+    answer = parts[0].get("text", "").strip()
+
+    if not answer:
+        return None, "Răspuns Gemini gol."
+
+    return answer, None
+
+
+def get_ai_response(chat_id, user_text):
+    global KNOWN_USERS
+
+    is_first = chat_id not in KNOWN_USERS
+    KNOWN_USERS.add(chat_id)
+
+    if not GEMINI_API_KEY:
+        return "⚠️ EROARE: GEMINI_API_KEY nu este setat în Railway!"
+
+    if is_first:
+        user_text = (
+            "IMPORTANT: Acesta este primul mesaj al utilizatorului. "
+            "Începe obligatoriu răspunsul cu: "
+            "Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖\n\n"
+            + user_text
         )
 
-        data = response.json()
+    last_error = ""
 
-        if response.status_code != 200:
-            error = data.get("error", {})
-            message = error.get(
-                "message",
-                "Eroare necunoscută Gemini"
+    for model in GEMINI_MODELS:
+        try:
+            answer, error = ask_gemini(
+                model,
+                user_text
             )
 
-            return f"❌ Eroare Gemini API: {message}"
+            if answer:
+                print(f"Răspuns primit de la Gemini: {model}")
+                return answer
 
-        candidates = data.get("candidates", [])
+            last_error = error or "Eroare necunoscută"
 
-        if not candidates:
-            return "⚠️ Gemini nu a returnat niciun răspuns."
+            print(
+                f"Modelul {model} nu a răspuns: {last_error}"
+            )
 
-        parts = candidates[0].get("content", {}).get("parts", [])
+        except Exception as e:
+            last_error = str(e)
 
-        if not parts:
-            return "⚠️ Gemini a returnat un răspuns gol."
+            print(
+                f"Eroare la modelul {model}: {e}"
+            )
 
-        answer = parts[0].get("text", "").strip()
-
-        if not answer:
-            return "⚠️ Gemini a returnat un răspuns gol."
-
-        return answer
-
-    except requests.exceptions.Timeout:
-        return "❌ Gemini nu a răspuns la timp."
-
-    except requests.exceptions.RequestException as e:
-        return f"❌ Eroare conexiune Gemini: {str(e)}"
-
-    except Exception as e:
-        return f"❌ Eroare AI: {str(e)}"
+    return (
+        "❌ Gemini nu este disponibil momentan. "
+        "Încearcă din nou peste câteva secunde."
+    )
 
 
 def main():
     global OFFSET
 
     if not TOKEN:
-        print("EROARE: BOT_TOKEN nu este setat!")
+        print("❌ BOT_TOKEN nu este setat!")
         return
 
     if not GEMINI_API_KEY:
-        print("EROARE: GEMINI_API_KEY nu este setat!")
+        print("❌ GEMINI_API_KEY nu este setat!")
         return
 
     print("================================")
@@ -284,7 +278,7 @@ def main():
                     continue
 
                 # =========================
-                # TRIMITE MESAJ TELEGRAM
+                # TRIMITE RĂSPUNS
                 # =========================
 
                 requests.post(
@@ -309,5 +303,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
