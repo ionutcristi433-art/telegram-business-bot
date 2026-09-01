@@ -2,7 +2,7 @@ import os
 import time
 import requests
 
-TOKEN = os.environ["BOT_TOKEN"]
+TOKEN = os.environ.get("BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 API = f"https://api.telegram.org/bot{TOKEN}"
@@ -11,57 +11,70 @@ LINK_GRUP = "https://t.me/+etpqxigeQ7FlOGE0"
 OFFSET = 0
 KNOWN_USERS = set()
 
-# Instrucțiunile pentru AI (păstrat doar IBAN-ul)
-SYSTEM_PROMPT = f"""
-Ești un asistent virtual pe Telegram.
-Rolul tău este să vorbești scurt, natural și prietenos în limba română.
+# Prompt creat special pentru o conversație umane, ultra-naturală
+SYSTEM_PROMPT = """
+Ești un admin/asistent super prietenos, amabil și uman pe Telegram.
+Numele tău de pe chat este prietenos, vorbești fix ca un om de zi cu zi (folosești emoticoane, prescurtări naturale când e cazul, limbaj cald).
 
-REGULI OBLIGATORII:
-1. La PRIMUL mesaj dintr-o conversație nouă, începe RĂSPUNSUL exact cu fraza: "Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖"
-2. La următoarele mesaje din aceeași conversație, NU mai repeta fraza de introducere. Răspunde direct și scurt (1-2 propoziții).
-3. Răspunde la orice întrebare de zi cu zi (ce faci, dormi, glume, chestii umane) relaxat și prietenos.
+REGULI OBLIGATORII DE COMPORTAMENT:
+1. PRIMUL MESAJ DIN CHAT: Trebuie obligatoriu să înceapă FIX cu fraza:
+"Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖"
+După această frază, continuă conversația natural.
 
-INFORMAȚII PLATĂ (le oferi când clientul întreabă de plată sau iban):
-- Date plată IBAN: RO36 RNCB 0511 1755 6400 0001 (BCR - Nenea Ionică Polițistul), Titular: Cristian ionut B.
-- Spune-i clientului că după ce face plata, trebuie să trimită o POZĂ (screenshot) cu dovada plății direct pe chat pentru a primi link-ul de acces.
+2. MESAJELE URMĂTOARE: NU mai repeta NICIODATĂ fraza de mai sus! Vorbește direct, scurt (1-3 propoziții), cald și natural.
+
+3. STIL DE CONVERSAȚIE UMANĂ:
+- Dacă omul te întreabă "ce faci", "ce mai zici", "ce faci w", răspunde-i ca un prieten (ex: "Uite bine, stau pe acasă și mă mai uit pe mesaje. Tu ce mai faci? 😊").
+- Dacă omul zice că e obosit/merge la culcare, dorește-i somn ușor.
+- Fii sociabil, nu aduce vorba de IBAN sau plată din proprie inițiativă dacă omul doar face small-talk sau te întreabă de viață.
+
+4. INFORMAȚII PLATĂ & IBAN (Oferă-le DOAR când omul întreabă de plată, bani, acces sau IBAN):
+- IBAN: RO36 RNCB 0511 1755 6400 0001
+- Titular: Cristian ionut B
+- Explică-i scurt și uman: "Trimiți banii în contul de mai sus, iar după ce ai făcut transferul, lasă-mi o poză/screenshot cu dovada direct aici pe chat ca să-ți dau accesul pe loc! 💳✨"
 """
 
 
 def get_ai_response(chat_id, user_text):
     global KNOWN_USERS
 
-    is_first_message = chat_id not in KNOWN_USERS
+    is_first = chat_id not in KNOWN_USERS
     KNOWN_USERS.add(chat_id)
 
-    context_instruction = ""
-    if is_first_message:
-        context_instruction = " (Aceasta este prima interacțiune cu utilizatorul. Nu uita să începi cu fraza obligatorie: 'Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖')"
+    instruction = ""
+    if is_first:
+        instruction = " (ATENȚIE: Acesta este primul mesaj! Începe obligatoriu cu: 'Salut! Eu sunt un chatbot automat, nu sunt o persoană reală. 🤖')"
 
     if not GROQ_API_KEY:
-        return "Salut! Eu sunt un chatbot automat. Scrie-mi 'iban' pentru datele de plată!"
+        print("EROARE CRITICĂ: GROQ_API_KEY nu este setată în Railway!")
+        return "Eroare setare AI. Verifică cheia în Railway."
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
         "Content-Type": "application/json"
     }
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text + context_instruction}
+            {"role": "user", "content": user_text + instruction}
         ],
-        "max_tokens": 150,
-        "temperature": 0.7
+        "max_tokens": 180,
+        "temperature": 0.8  # Temperatură puțin mai mare pentru un ton mai uman și mai creativ
     }
 
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=15)
-        data = res.json()
-        return data["choices"][0]["message"]["content"].strip()
+        res_json = res.json()
+        if "choices" in res_json:
+            return res_json["choices"][0]["message"]["content"].strip()
+        else:
+            print("Eroare răspuns Groq:", res_json)
+            return "Hey! Sunt aici. Cu ce te pot ajuta? 😊"
     except Exception as e:
-        print("Eroare AI:", e)
-        return "Uite bine! Tu ce mai faci? 😊 Scrie-mi 'iban' pentru datele de plată."
+        print("Eroare conexiune AI:", e)
+        return "Sunt online! Spune-mi ce mai zici sau dacă ai nevoie de IBAN."
 
 
 def main():
@@ -98,15 +111,14 @@ def main():
                 if not connection_id:
                     continue
 
-                # 1. Dacă trimite poză (dovada plății)
+                # Când primește poză (dovada plății)
                 if photo:
                     answer = (
-                        "Am primit poza cu dovada plății! 💳✅ Îți mulțumim!\n\n"
-                        "Uite link-ul tău direct de acces în grup:\n"
+                        "Super! Am primit poza cu dovada plății! 💳✅ Îți mulțumesc frumos!\n\n"
+                        "Aici ai link-ul tău direct pentru accesul în grup:\n"
                         f"{LINK_GRUP}\n\n"
-                        "Intră pe link și bucură-te de conținut! 🌸"
+                        "Apasă pe el și bine ai venit! 🌸"
                     )
-                # 2. Dacă trimite text
                 elif text:
                     answer = get_ai_response(chat_id, text)
                 else:
@@ -123,11 +135,12 @@ def main():
                 )
 
         except Exception as e:
-            print("Eroare:", e)
+            print("Eroare main loop:", e)
             time.sleep(5)
 
 
 if __name__ == "__main__":
     main()
+
 
 
